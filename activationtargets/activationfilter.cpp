@@ -173,6 +173,7 @@ bool ActivationFilter::handleShareEvent(ComPtr<IInspectable> &inspectable)
     hr = d->shareTarget.Get()->get_ShareOperation(&d->shareOp);
     RETURN_FALSE_IF_FAILED("Could not access share operation.");
 
+    emit shareActivationStarted();
     return true;
 }
 

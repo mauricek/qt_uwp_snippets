@@ -15,53 +15,98 @@ using namespace Microsoft::WRL::Wrappers;
 using namespace ABI::Windows::Foundation;
 
 LoginManager::LoginManager(QObject *parent) : QObject(parent)
+  , m_state(LoginManager::Idle)
+  , m_error(LoginManager::NoError)
 {
     HRESULT hr;
-
-    hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_Security_Credentials_KeyCredentialManager).Get(), IID_PPV_ARGS(&statics));
 
     hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_Security_Credentials_UI_UserConsentVerifier).Get(), IID_PPV_ARGS(&ui_statics));
 }
 
 bool LoginManager::isValid() const
 {
-    boolean supported;
-    ComPtr<IAsyncOperation<bool>> op;
-    HRESULT hr = statics.Get()->IsSupportedAsync(&op);
+    UserConsentVerifierAvailability available;
+    ComPtr<IAsyncOperation<enum ABI::Windows::Security::Credentials::UI::UserConsentVerifierAvailability>> availableOp;
+    ui_statics.Get()->CheckAvailabilityAsync(&availableOp);
+    HRESULT hr = QWinRTFunctions::await(availableOp, &available);
 
-    hr = QWinRTFunctions::await(op, &supported);
-    qDebug() << "Supported:" << supported;
-    return supported;
+    if (FAILED(hr) || available != UserConsentVerifierAvailability_Available)
+        return false;
+
+    return true;
+}
+
+LoginManager::State LoginManager::state() const
+{
+    return m_state;
+}
+
+LoginManager::LoginError LoginManager::error() const
+{
+    return m_error;
+}
+
+HRESULT LoginManager::authenticationDone(IAsyncOperation<enum ABI::Windows::Security::Credentials::UI::UserConsentVerificationResult> *, AsyncStatus)
+{
+    qDebug() << "Done...";
+    return S_OK;
 }
 
 void LoginManager::login()
 {
+    setError(LoginManager::NoError);
+    setState(LoginManager::Verifying);
+
     UserConsentVerificationResult request;
     ComPtr<IAsyncOperation<enum ABI::Windows::Security::Credentials::UI::UserConsentVerificationResult>> requestOp;
 
     HRESULT hr = QEventDispatcherWinRT::runOnXamlThread([this, &request, &requestOp]() {
-        UserConsentVerifierAvailability available;
-        ComPtr<IAsyncOperation<enum ABI::Windows::Security::Credentials::UI::UserConsentVerifierAvailability>> availableOp;
-        ui_statics.Get()->CheckAvailabilityAsync(&availableOp);
-        HRESULT hr = QWinRTFunctions::await(availableOp, &available);
-        qDebug() << "Available:" << available;
-
-        if (SUCCEEDED(hr) && available == UserConsentVerifierAvailability_Available) {
-            hr = ui_statics.Get()->RequestVerificationAsync(HString::MakeReference(L"Checking what is there").Get(), &requestOp);
-
-            //        UserConsentVerificationResult_Verified	= 0,
-            //        UserConsentVerificationResult_DeviceNotPresent	= 1,
-            //        UserConsentVerificationResult_NotConfiguredForUser	= 2,
-            //        UserConsentVerificationResult_DisabledByPolicy	= 3,
-            //        UserConsentVerificationResult_DeviceBusy	= 4,
-            //        UserConsentVerificationResult_RetriesExhausted	= 5,
-            //        UserConsentVerificationResult_Canceled	= 6
-
-        }
+        HRESULT hr;
+        hr = ui_statics.Get()->RequestVerificationAsync(HString::MakeReference(L"Title for authentication").Get(), &requestOp);
         return S_OK;
     });
 
-    hr = QWinRTFunctions::await(requestOp, &request);
-    qDebug() << "Result:" << request << hr;
-    qDebug() << "HR:" << hr;
+    if (!requestOp || FAILED(QWinRTFunctions::await(requestOp, &request))) {
+        setError(LoginManager::Error);
+        setState(LoginManager::Done);
+        return;
+    }
+
+    auto opCallback = Callback<IAsyncOperationCompletedHandler<enum ABI::Windows::Security::Credentials::UI::UserConsentVerificationResult>>(this, &LoginManager::authenticationDone);
+    requestOp.Get()->put_Completed(opCallback.Get());
+    UserConsentVerificationResult verificationResult;
+    hr = requestOp.Get()->GetResults(&verificationResult);
+    //        UserConsentVerificationResult_Verified    = 0,
+    //        UserConsentVerificationResult_DeviceNotPresent    = 1,
+    //        UserConsentVerificationResult_NotConfiguredForUser    = 2,
+    //        UserConsentVerificationResult_DisabledByPolicy    = 3,
+    //        UserConsentVerificationResult_DeviceBusy  = 4,
+    //        UserConsentVerificationResult_RetriesExhausted    = 5,
+    //        UserConsentVerificationResult_Canceled    = 6
+    if (FAILED(hr) || verificationResult != UserConsentVerificationResult_Verified) {
+        setError(LoginManager::Error);
+        setState(LoginManager::Done);
+        return;
+    }
+
+    setState(LoginManager::Done);
+    setError(LoginManager::NoError);
+}
+
+void LoginManager::setState(LoginManager::State state)
+{
+    if (m_state == state)
+        return;
+
+    m_state = state;
+    emit stateChanged(state);
+}
+
+void LoginManager::setError(LoginManager::LoginError error)
+{
+    if (m_error == error)
+        return;
+
+    m_error = error;
+    emit errorChanged(error);
 }

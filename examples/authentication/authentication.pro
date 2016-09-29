@@ -12,7 +12,8 @@ QT += widgets
 SOURCES += main.cpp \
     form.cpp
 
-include(../../authentication/authentication.pri)
+#include(../../authentication/authentication.pri)
+include(../../authentication_async/authentication_async.pri)
 
 FORMS += \
     form.ui

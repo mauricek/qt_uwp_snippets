@@ -27,6 +27,8 @@ public:
     State state() const;
     LoginError error() const;
 
+    HRESULT authenticationDone(ABI::Windows::Foundation::IAsyncOperation<enum ABI::Windows::Security::Credentials::UI::UserConsentVerificationResult> *,
+                                  ABI::Windows::Foundation::AsyncStatus);
 signals:
     void stateChanged(State state);
     void errorChanged(LoginError error);
@@ -38,6 +40,7 @@ public slots:
 
 private:
     Microsoft::WRL::ComPtr<ABI::Windows::Security::Credentials::UI::IUserConsentVerifierStatics> ui_statics;
+
     State m_state;
     LoginError m_error;
 };

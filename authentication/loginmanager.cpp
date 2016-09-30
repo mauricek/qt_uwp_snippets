@@ -54,7 +54,7 @@ void LoginManager::login()
     UserConsentVerificationResult request;
     ComPtr<IAsyncOperation<enum ABI::Windows::Security::Credentials::UI::UserConsentVerificationResult>> requestOp;
 
-    HRESULT hr = QEventDispatcherWinRT::runOnXamlThread([this, &request, &requestOp]() {
+    HRESULT hr = QEventDispatcherWinRT::runOnXamlThread([this, &requestOp]() {
         HRESULT hr;
         hr = ui_statics.Get()->RequestVerificationAsync(HString::MakeReference(L"Title for authentication").Get(), &requestOp);
         return S_OK;

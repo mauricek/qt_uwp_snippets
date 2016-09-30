@@ -13,7 +13,8 @@ SOURCES += main.cpp \
     form.cpp
 
 #include(../../authentication/authentication.pri)
-include(../../authentication_async/authentication_async.pri)
+#include(../../authentication_async/authentication_async.pri)
+include(../../authentication_cxx/authentication_cxx.pri)
 
 FORMS += \
     form.ui

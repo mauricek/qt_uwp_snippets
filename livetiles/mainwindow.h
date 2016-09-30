@@ -1,6 +1,6 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
-
+#include "livetile.h"
 #include <QMainWindow>
 
 namespace Ui {
@@ -20,6 +20,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    LiveTile *tile;
 };
 
 #endif // MAINWINDOW_H

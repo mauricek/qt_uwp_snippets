@@ -14,30 +14,26 @@ using namespace ABI::Windows::UI;
 using namespace ABI::Windows::UI::Notifications;
 using namespace ABI::Windows::Data::Xml::Dom;
 
-ComPtr<ITileUpdateManagerStatics> updateManager;
-ComPtr<ITileNotificationFactory> notificationFactory;
-ComPtr<IXmlDocument> currentTemplateDocument;
+class LiveTilePrivate
+{
+public:
+    ComPtr<ITileUpdateManagerStatics> updateManager;
+    ComPtr<ITileNotificationFactory> notificationFactory;
+    ComPtr<IXmlDocument> currentTemplateDocument;
+};
+
 
 LiveTile::LiveTile(QObject *parent) : QObject(parent)
 {
-//    Tile Erzeugen:
-//    ITileNotificationFactory
-//    -> CreateTileNotification (woher XML FIle?)
-
-//    ITileUpdateManagerStatics
-//    -> GetTemplateContent(enum), ergibt XML
-//    -> CreateTileUpdaterForApplication
-
-//    ergibt ITileUpdater
-//    -> Update (Notification)
+    m_priv = new LiveTilePrivate;
 
     HRESULT hr;
     hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_UI_Notifications_TileUpdateManager).Get(),
-                                IID_PPV_ARGS(&updateManager));
+                                IID_PPV_ARGS(&m_priv->updateManager));
     Q_ASSERT_SUCCEEDED(hr);
 
     hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_UI_Notifications_TileNotification).Get(),
-                                IID_PPV_ARGS(&notificationFactory));
+                                IID_PPV_ARGS(&m_priv->notificationFactory));
     Q_ASSERT_SUCCEEDED(hr);
 }
 
@@ -46,14 +42,14 @@ QString LiveTile::text() const
     return m_text;
 }
 
-QString LiveTile::description() const
-{
-    return m_description;
-}
-
 QString LiveTile::image() const
 {
     return m_image;
+}
+
+QString LiveTile::title() const
+{
+    return m_title;
 }
 
 void LiveTile::setText(QString text)
@@ -63,15 +59,6 @@ void LiveTile::setText(QString text)
 
     m_text = text;
     emit textChanged(text);
-}
-
-void LiveTile::setDescription(QString description)
-{
-    if (m_description == description)
-        return;
-
-    m_description = description;
-    emit descriptionChanged(description);
 }
 
 void LiveTile::setImage(QString image)
@@ -86,71 +73,61 @@ void LiveTile::setImage(QString image)
 void LiveTile::update()
 {
     HRESULT hr;
-//    hr = updateManager.Get()->GetTemplateContent(TileTemplateType_TileSquareText01,
-//                                                 &currentTemplateDocument);
-    hr = updateManager.Get()->GetTemplateContent(TileTemplateType_TileSquarePeekImageAndText01,
-                                                 &currentTemplateDocument);
+
+    // TemplateContent is a complete xml description of the visual
+    // representation of a tile
+    hr = m_priv->updateManager->GetTemplateContent(TileTemplateType_TileSquareText01,
+                                                 &m_priv->currentTemplateDocument);
     if (FAILED(hr)) {
         qDebug("Could not access template document");
         return;
     }
 
-    // Get content into XML File
+    // Now we need to exchange/add content to the xml, ie the string
+    // we want to have represented
     ComPtr<IXmlNodeList> nodes;
-//    var tileAttributes = tileXml.getElementsByTagName("text");
-//        tileAttributes[0].appendChild(tileXml.createTextNode("Hello World!"));
-    hr = currentTemplateDocument.Get()->GetElementsByTagName(HString::MakeReference(L"text").Get(), &nodes);
+    hr = m_priv->currentTemplateDocument->GetElementsByTagName(HString::MakeReference(L"text").Get(), &nodes);
 
-    ComPtr<IXmlNode> node;
-    hr = nodes.Get()->Item(0, &node);
-    ComPtr<IXmlText> textNode;
-    hr = currentTemplateDocument.Get()->CreateTextNode(HString::MakeReference(L"Wird References...").Get(), &textNode);
-    ComPtr<IXmlNode> textNodeNode;
-    hr = textNode.As(&textNodeNode);
-    ComPtr<IXmlNode> appendedChild;
-    hr = node.Get()->AppendChild(textNodeNode.Get(), &appendedChild);
-
-#if 1 // Testing additional texts
     {
-    ComPtr<IXmlNode> node;
-    hr = nodes.Get()->Item(1, &node);
-    ComPtr<IXmlText> textNode;
-    hr = currentTemplateDocument.Get()->CreateTextNode(HString::MakeReference(L"Subtitle magic").Get(), &textNode);
-    ComPtr<IXmlNode> textNodeNode;
-    hr = textNode.As(&textNodeNode);
-    ComPtr<IXmlNode> appendedChild;
-    hr = node.Get()->AppendChild(textNodeNode.Get(), &appendedChild);
+        ComPtr<IXmlNode> node;
+        hr = nodes->Item(0, &node);
+        ComPtr<IXmlText> textNode;
+        HString hTitle;
+        hTitle.Set((PCWSTR)m_title.utf16(), m_title.size());
+        hr = m_priv->currentTemplateDocument->CreateTextNode(hTitle.Get(), &textNode);
+        ComPtr<IXmlNode> textNodeNode;
+        hr = textNode.As(&textNodeNode);
+        ComPtr<IXmlNode> appendedChild;
+        hr = node->AppendChild(textNodeNode.Get(), &appendedChild);
     }
-#endif
-#if 1 // For testing remote images
-    {
-        hr = currentTemplateDocument.Get()->GetElementsByTagName(HString::MakeReference(L"image").Get(), &nodes);
-    ComPtr<IXmlNode> node;
 
-    // get_Attributes IXmlNamedNodeMap
-    // Check for values: https://msdn.microsoft.com/en-us/library/windows/apps/br212855.aspx
-    // we need "src", maybe "id" as well
-    // GetNamedItem src IXmlNode
-    // Set text for src node
-    // SetNamedItem (modified node)
-    hr = nodes.Get()->Item(0, &node);
-    ComPtr<IXmlText> textNode;
-    hr = currentTemplateDocument.Get()->CreateTextNode(HString::MakeReference(L"http://colorlib.com/dazzling/wp-content/uploads/sites/6/2013/03/image-alignment-150x150.jpg").Get(), &textNode);
-    ComPtr<IXmlNode> textNodeNode;
-    hr = textNode.As(&textNodeNode);
-    ComPtr<IXmlNode> appendedChild;
-    hr = node.Get()->AppendChild(textNodeNode.Get(), &appendedChild);
+    {
+        ComPtr<IXmlNode> node;
+        hr = nodes->Item(1, &node);
+        ComPtr<IXmlText> textNode;
+        HString hString;
+        hString.Set((PCWSTR)m_text.utf16(), m_text.size());
+        hr = m_priv->currentTemplateDocument->CreateTextNode(hString.Get(), &textNode);
+        ComPtr<IXmlNode> textNodeNode;
+        hr = textNode.As(&textNodeNode);
+        ComPtr<IXmlNode> appendedChild;
+        hr = node->AppendChild(textNodeNode.Get(), &appendedChild);
     }
-#endif
-// https://colorlib.com/dazzling/wp-content/uploads/sites/6/2013/03/image-alignment-150x150.jpg
     ComPtr<ITileNotification> notification;
-    hr = notificationFactory.Get()->CreateTileNotification(currentTemplateDocument.Get(),
+    hr = m_priv->notificationFactory->CreateTileNotification(m_priv->currentTemplateDocument.Get(),
                                                       &notification);
 
     ComPtr<ITileUpdater> tileUpdater;
-    hr = updateManager.Get()->CreateTileUpdaterForApplication(&tileUpdater);
+    hr = m_priv->updateManager->CreateTileUpdaterForApplication(&tileUpdater);
 
-    hr = tileUpdater.Get()->Update(notification.Get());
+    hr = tileUpdater->Update(notification.Get());
+}
 
-    qDebug() << "Am ende:" << hr;
+void LiveTile::setTitle(QString title)
+{
+    if (m_title == title)
+        return;
+
+    m_title = title;
+    emit titleChanged(title);
 }

@@ -9,35 +9,39 @@
 // Available tiles:
 // https://msdn.microsoft.com/en-us/library/windows/apps/windows.ui.notifications.tiletemplatetype.aspx
 
+class LiveTilePrivate;
+
 class LiveTile : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString text READ text WRITE setText NOTIFY textChanged)
-    Q_PROPERTY(QString description READ description WRITE setDescription NOTIFY descriptionChanged)
+    Q_PROPERTY(QString title READ title WRITE setTitle NOTIFY titleChanged)
     Q_PROPERTY(QString image READ image WRITE setImage NOTIFY imageChanged)
-    QString m_text;
-
-    QString m_description;
-
-    QString m_image;
 
 public:
     explicit LiveTile(QObject *parent = 0);
 
     QString text() const;
-    QString description() const;
     QString image() const;
+    QString title() const;
 
 signals:
     void textChanged(QString text);
-    void descriptionChanged(QString description);
     void imageChanged(QString image);
+
+    void titleChanged(QString title);
 
 public slots:
     void setText(QString text);
-    void setDescription(QString description);
     void setImage(QString image);
     void update();
+    void setTitle(QString title);
+
+private:
+    LiveTilePrivate *m_priv;
+    QString m_text;
+    QString m_image;
+    QString m_title;
 };
 
 #endif // LIVETILE_H
